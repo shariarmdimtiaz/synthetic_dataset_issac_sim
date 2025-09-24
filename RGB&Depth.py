@@ -5,7 +5,7 @@ import omni, omni.timeline
 import omni.replicator.core as rep
 import imageio.v2 as iio
 import matplotlib.cm as cm
-
+import matplotlib
 
 # -------- settings --------
 OUTPUT_DIR   = r"C:\Project\data"
@@ -92,3 +92,33 @@ async def capture():
                     dm = np.clip((depth - dmin) / (dmax - dmin + 1e-6), 0, 1)
                 else:
                     dm = np.zeros_like(depth)
+
+                # --- Apply color map ---            
+                # cmap = matplotlib.colormaps["viridis"]
+                depth_rgb = (cmap(dm)[..., :3] * 255).astype(np.uint8)
+                iio.imwrite(os.path.join(depth_dir, f"depth_{frame:06d}.png"), depth_rgb)
+            # --- CSV ---
+            writer.writerow([
+                frame,
+                f"{obj_center[0]:.6f}", f"{obj_center[1]:.6f}", f"{obj_center[2]:.6f}",
+                f"{cam_pos[0]:.6f}",   f"{cam_pos[1]:.6f}",   f"{cam_pos[2]:.6f}",
+                f"{dist:.6f}"
+            ])
+    print(f"[DONE] Saved frames to {OUTPUT_DIR}")
+
+async def driver():
+    try:
+        task = asyncio.create_task(capture())
+        while not task.done():
+            await omni.kit.app.get_app().next_update_async()
+    finally:
+        try: rgb_annot.detach()
+        except: pass
+        try: depth_annot.detach()
+        except: pass
+        try:
+            rep.orchestrator.stop()
+            rep.orchestrator.restop()
+        except: pass
+# execution
+asyncio.ensure_future(driver())
